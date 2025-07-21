@@ -39,7 +39,7 @@ def check_ffmpeg():
             install_cmd = "brew install ffmpeg"
             extra_note = t("Install Homebrew first (https://brew.sh/)")
         elif system == "Linux":
-            install_cmd = "sudo apt install ffmpeg  # Ubuntu/Debian\nsudo yum install ffmpeg  # CentOS/RHEL"
+            install_cmd = "apt install ffmpeg  # Ubuntu/Debian\n yum install ffmpeg  # CentOS/RHEL"
             extra_note = t("Use your distribution's package manager")
         
         console.print(Panel.fit(
@@ -97,11 +97,11 @@ def main():
         # Detect Linux distribution type
         if os.path.exists('/etc/debian_version'):
             # Debian/Ubuntu systems
-            cmd = ['sudo', 'apt-get', 'install', '-y', 'fonts-noto']
+            cmd = ['apt-get', 'install', '-y', 'fonts-noto']
             pkg_manager = "apt-get"
         elif os.path.exists('/etc/redhat-release'):
             # RHEL/CentOS/Fedora systems
-            cmd = ['sudo', 'yum', 'install', '-y', 'google-noto*']
+            cmd = ['yum', 'install', '-y', 'google-noto*']
             pkg_manager = "yum"
         else:
             console.print("Warning: Unrecognized Linux distribution, please install Noto fonts manually", style="yellow")
