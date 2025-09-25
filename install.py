@@ -187,10 +187,6 @@ def main():
     else:
         # start the application
         subprocess.Popen(["streamlit", "run", "st.py"])
-        console.print(Panel("🏖️ Modal environment detected, skipping automatic startup", style="cyan"))
-    else:
-        # start the application
-        subprocess.Popen(["streamlit", "run", "st.py"])
 
 if __name__ == "__main__":
     main()
