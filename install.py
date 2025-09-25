@@ -181,9 +181,13 @@ def main():
     )
     console.print(Panel(panel2_text, style="yellow"))
 
-    # Skip automatic startup in Modal environment
-    if os.environ.get("MODAL_ENVIRONMENT") or os.environ.get("STREAMLIT_SERVER_PORT"):
-        console.print(Panel("🏖️ Modal environment detected, skipping automatic startup", style="cyan"))
+    # Skip automatic startup in Modal environment or when port is already in use
+    if (os.environ.get("MODAL_ENVIRONMENT") or 
+        os.environ.get("STREAMLIT_SERVER_PORT") or 
+        os.environ.get("MODAL_TASK_ID") or
+        "modal" in os.getcwd().lower()):
+        console.print(Panel("🏖️ Modal/Container environment detected, skipping automatic startup", style="cyan"))
+        console.print(Panel("✅ Installation completed successfully! Streamlit will be started by the container.", style="green"))
     else:
         # start the application
         subprocess.Popen(["streamlit", "run", "st.py"])
