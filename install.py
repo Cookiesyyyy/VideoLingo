@@ -48,7 +48,6 @@ def check_ffmpeg():
     console = Console()
 
     try:
-        # Check if ffmpeg is installed
         subprocess.run(['ffmpeg', '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         console.print(Panel(t("✅ FFmpeg is already installed"), style="green"))
         return True
@@ -63,18 +62,17 @@ def check_ffmpeg():
             install_cmd = "brew install ffmpeg"
             extra_note = t("Install Homebrew first (https://brew.sh/)")
         elif system == "Linux":
-            install_cmd = "sudo apt install ffmpeg  # Ubuntu/Debian\nsudo yum install ffmpeg  # CentOS/RHEL"
+            install_cmd = "apt install ffmpeg  # Ubuntu/Debian\nyum install ffmpeg  # CentOS/RHEL"
             extra_note = t("Use your distribution's package manager")
         
         console.print(Panel.fit(
-            t("⚠️ FFmpeg not found in PATH\n\n") +
+            t("❌ FFmpeg not found\n\n") +
             f"{t('🛠️ Install using:')}\n[bold cyan]{install_cmd}[/bold cyan]\n\n" +
             f"{t('💡 Note:')}\n{extra_note}\n\n" +
-            f"{t('🔄 Continuing installation, but FFmpeg may be required for video processing')}\n",
-            style="yellow"
+            f"{t('🔄 After installing FFmpeg, please run this installer again:')}\n[bold cyan]python install.py[/bold cyan]",
+            style="red"
         ))
-        console.print(Panel("⚠️ FFmpeg not detected, but continuing installation...", style="yellow"))
-        return False
+        raise SystemExit(t("FFmpeg is required. Please install it and run the installer again."))
 
 def main():
     install_package("requests", "rich", "ruamel.yaml", "InquirerPy")
@@ -98,31 +96,32 @@ def main():
         border_style="bright_blue"
     )
     console.print(welcome_panel)
-    # Language selection - Default to Chinese
-    current_language = load_key("display_language")
-    if not current_language:
-        # Set default to Chinese
-        selected_language = "zh-CN"
-        update_key("display_language", selected_language)
-        console.print(Panel(f"🌏 默认语言设置为中文 / Default language set to Chinese", style="cyan"))
-    else:
-        selected_language = current_language
+
+    # 默认语言：中文
+    selected_language = DISPLAY_LANGUAGES.get("🇨🇳 简体中文", "zh_CN")
+    update_key("display_language", selected_language)
 
     console.print(Panel.fit(t("🚀 Starting Installation"), style="bold magenta"))
 
-    # Configure mirrors - Default to international PyPI
-    console.print(Panel(t("🌍 Using international PyPI mirrors (default)"), style="cyan"))
-    # Skip mirror configuration to use default international mirrors
+    # 默认使用 PyPI 官方源
+    console.print(Panel(t("Using default PyPI source (https://pypi.org/simple)"), style="cyan"))
 
     # Detect system and GPU
     has_gpu = platform.system() != 'Darwin' and check_nvidia_gpu()
     if has_gpu:
-        console.print(Panel(t("🎮 NVIDIA GPU detected, installing CUDA version of PyTorch..."), style="cyan"))
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "torch==2.0.0", "torchaudio==2.0.0", "--index-url", "https://download.pytorch.org/whl/cu118"])
+        console.print(Panel(t("🎮 NVIDIA GPU detected, installing CUDA 12.1 version of PyTorch..."), style="cyan"))
+        subprocess.check_call([
+            sys.executable, "-m", "pip", "install",
+            "torch==2.1.2+cu121", "torchaudio==2.1.2+cu121",
+            "--index-url", "https://download.pytorch.org/whl/cu121"
+        ])
     else:
         system_name = "🍎 MacOS" if platform.system() == 'Darwin' else "💻 No NVIDIA GPU"
-        console.print(Panel(t(f"{system_name} detected, installing CPU version of PyTorch... Note: it might be slow during whisperX transcription."), style="cyan"))
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "torch==2.1.2", "torchaudio==2.1.2"])
+        console.print(Panel(t(f"{system_name} detected, installing CPU version of PyTorch..."), style="cyan"))
+        subprocess.check_call([
+            sys.executable, "-m", "pip", "install",
+            "torch==2.1.2", "torchaudio==2.1.2"
+        ])
 
     @except_handler("Failed to install project")
     def install_requirements():
@@ -131,40 +130,25 @@ def main():
 
     @except_handler("Failed to install Noto fonts")
     def install_noto_font():
-        # Skip font installation in containerized environments
-        if os.environ.get("MODAL_ENVIRONMENT") or os.path.exists("/.dockerenv"):
-            console.print("🐳 Container environment detected, skipping system font installation", style="cyan")
-            return
-            
-        # Detect Linux distribution type
         if os.path.exists('/etc/debian_version'):
-            # Debian/Ubuntu systems - without sudo
             cmd = ['apt-get', 'install', '-y', 'fonts-noto']
             pkg_manager = "apt-get"
         elif os.path.exists('/etc/redhat-release'):
-            # RHEL/CentOS/Fedora systems - without sudo
             cmd = ['yum', 'install', '-y', 'google-noto*']
             pkg_manager = "yum"
         else:
-            console.print("Warning: Unrecognized Linux distribution, skipping Noto fonts installation", style="yellow")
+            console.print("Warning: Unrecognized Linux distribution, please install Noto fonts manually", style="yellow")
             return
 
-        try:
-            subprocess.run(cmd, check=True)
-            console.print(f"✅ Successfully installed Noto fonts using {pkg_manager}", style="green")
-        except subprocess.CalledProcessError:
-            console.print(f"⚠️ Could not install Noto fonts with {pkg_manager}, continuing without fonts", style="yellow")
+        subprocess.run(cmd, check=True)
+        console.print(f"✅ Successfully installed Noto fonts using {pkg_manager}", style="green")
 
     if platform.system() == 'Linux':
         install_noto_font()
     
     install_requirements()
-    ffmpeg_available = check_ffmpeg()
+    check_ffmpeg()
     
-    if not ffmpeg_available:
-        console.print(Panel("⚠️ FFmpeg not found, but installation will continue. Video processing may not work properly.", style="yellow"))
-    
-    # First panel with installation complete and startup command
     panel1_text = (
         t("Installation completed") + "\n\n" +
         t("Now I will run this command to start the application:") + "\n" +
@@ -173,7 +157,6 @@ def main():
     )
     console.print(Panel(panel1_text, style="bold green"))
 
-    # Second panel with troubleshooting tips
     panel2_text = (
         t("If the application fails to start:") + "\n" +
         "1. " + t("Check your network connection") + "\n" +
@@ -181,16 +164,7 @@ def main():
     )
     console.print(Panel(panel2_text, style="yellow"))
 
-    # Skip automatic startup in Modal environment or when port is already in use
-    if (os.environ.get("MODAL_ENVIRONMENT") or 
-        os.environ.get("STREAMLIT_SERVER_PORT") or 
-        os.environ.get("MODAL_TASK_ID") or
-        "modal" in os.getcwd().lower()):
-        console.print(Panel("🏖️ Modal/Container environment detected, skipping automatic startup", style="cyan"))
-        console.print(Panel("✅ Installation completed successfully! Streamlit will be started by the container.", style="green"))
-    else:
-        # start the application
-        subprocess.Popen(["streamlit", "run", "st.py"])
+    subprocess.Popen(["streamlit", "run", "st.py"])
 
 if __name__ == "__main__":
     main()
