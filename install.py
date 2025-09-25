@@ -67,13 +67,14 @@ def check_ffmpeg():
             extra_note = t("Use your distribution's package manager")
         
         console.print(Panel.fit(
-            t("❌ FFmpeg not found\n\n") +
+            t("⚠️ FFmpeg not found in PATH\n\n") +
             f"{t('🛠️ Install using:')}\n[bold cyan]{install_cmd}[/bold cyan]\n\n" +
             f"{t('💡 Note:')}\n{extra_note}\n\n" +
-            f"{t('🔄 After installing FFmpeg, please run this installer again:')}\n[bold cyan]python install.py[/bold cyan]",
-            style="red"
+            f"{t('🔄 Continuing installation, but FFmpeg may be required for video processing')}\n",
+            style="yellow"
         ))
-        raise SystemExit(t("FFmpeg is required. Please install it and run the installer again."))
+        console.print(Panel("⚠️ FFmpeg not detected, but continuing installation...", style="yellow"))
+        return False
 
 def main():
     install_package("requests", "rich", "ruamel.yaml", "InquirerPy")
@@ -97,27 +98,21 @@ def main():
         border_style="bright_blue"
     )
     console.print(welcome_panel)
-    # Language selection
+    # Language selection - Default to Chinese
     current_language = load_key("display_language")
-    # Find the display name for current language code
-    current_display = next((k for k, v in DISPLAY_LANGUAGES.items() if v == current_language), "🇬🇧 English")
-    selected_language = DISPLAY_LANGUAGES[inquirer.select(
-        message="Select language / 选择语言 / 選擇語言 / 言語を選択 / Seleccionar idioma / Sélectionner la langue / Выберите язык:",
-        choices=list(DISPLAY_LANGUAGES.keys()),
-        default=current_display
-    ).execute()]
-    update_key("display_language", selected_language)
+    if not current_language:
+        # Set default to Chinese
+        selected_language = "zh-CN"
+        update_key("display_language", selected_language)
+        console.print(Panel(f"🌏 默认语言设置为中文 / Default language set to Chinese", style="cyan"))
+    else:
+        selected_language = current_language
 
     console.print(Panel.fit(t("🚀 Starting Installation"), style="bold magenta"))
 
-    # Configure mirrors
-    # add a check to ask user if they want to configure mirrors
-    if inquirer.confirm(
-        message=t("Do you need to auto-configure PyPI mirrors? (Recommended if you have difficulty accessing pypi.org)"),
-        default=True
-    ).execute():
-        from core.utils.pypi_autochoose import main as choose_mirror
-        choose_mirror()
+    # Configure mirrors - Default to international PyPI
+    console.print(Panel(t("🌍 Using international PyPI mirrors (default)"), style="cyan"))
+    # Skip mirror configuration to use default international mirrors
 
     # Detect system and GPU
     has_gpu = platform.system() != 'Darwin' and check_nvidia_gpu()
@@ -136,27 +131,38 @@ def main():
 
     @except_handler("Failed to install Noto fonts")
     def install_noto_font():
+        # Skip font installation in containerized environments
+        if os.environ.get("MODAL_ENVIRONMENT") or os.path.exists("/.dockerenv"):
+            console.print("🐳 Container environment detected, skipping system font installation", style="cyan")
+            return
+            
         # Detect Linux distribution type
         if os.path.exists('/etc/debian_version'):
-            # Debian/Ubuntu systems
-            cmd = ['sudo', 'apt-get', 'install', '-y', 'fonts-noto']
+            # Debian/Ubuntu systems - without sudo
+            cmd = ['apt-get', 'install', '-y', 'fonts-noto']
             pkg_manager = "apt-get"
         elif os.path.exists('/etc/redhat-release'):
-            # RHEL/CentOS/Fedora systems
-            cmd = ['sudo', 'yum', 'install', '-y', 'google-noto*']
+            # RHEL/CentOS/Fedora systems - without sudo
+            cmd = ['yum', 'install', '-y', 'google-noto*']
             pkg_manager = "yum"
         else:
-            console.print("Warning: Unrecognized Linux distribution, please install Noto fonts manually", style="yellow")
+            console.print("Warning: Unrecognized Linux distribution, skipping Noto fonts installation", style="yellow")
             return
 
-        subprocess.run(cmd, check=True)
-        console.print(f"✅ Successfully installed Noto fonts using {pkg_manager}", style="green")
+        try:
+            subprocess.run(cmd, check=True)
+            console.print(f"✅ Successfully installed Noto fonts using {pkg_manager}", style="green")
+        except subprocess.CalledProcessError:
+            console.print(f"⚠️ Could not install Noto fonts with {pkg_manager}, continuing without fonts", style="yellow")
 
     if platform.system() == 'Linux':
         install_noto_font()
     
     install_requirements()
-    check_ffmpeg()
+    ffmpeg_available = check_ffmpeg()
+    
+    if not ffmpeg_available:
+        console.print(Panel("⚠️ FFmpeg not found, but installation will continue. Video processing may not work properly.", style="yellow"))
     
     # First panel with installation complete and startup command
     panel1_text = (
@@ -175,8 +181,16 @@ def main():
     )
     console.print(Panel(panel2_text, style="yellow"))
 
-    # start the application
-    subprocess.Popen(["streamlit", "run", "st.py"])
+    # Skip automatic startup in Modal environment
+    if os.environ.get("MODAL_ENVIRONMENT") or os.environ.get("STREAMLIT_SERVER_PORT"):
+        console.print(Panel("🏖️ Modal environment detected, skipping automatic startup", style="cyan"))
+    else:
+        # start the application
+        subprocess.Popen(["streamlit", "run", "st.py"])
+        console.print(Panel("🏖️ Modal environment detected, skipping automatic startup", style="cyan"))
+    else:
+        # start the application
+        subprocess.Popen(["streamlit", "run", "st.py"])
 
 if __name__ == "__main__":
     main()
